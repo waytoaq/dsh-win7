@@ -1,0 +1,182 @@
+name: Package DSH Win7
+
+# Full packaging needs the locally built Win7 artifacts (patched Electron/Node, runtime
+# overlay, PowerShell zip) and Visual Studio. Run this on a prepared self-hosted runner
+# registered with the `dsh-win7` label; GitHub-hosted runners cannot build these inputs.
+# Tag pushes build and upload an artifact; publishing a Release is opt-in via the
+# upload_release input of a manual run.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version, e.g. 0.2.2-rc.3. Leave empty to derive from the tag.'
+        required: false
+        type: string
+      tag:
+        description: 'Release tag, e.g. dsh-v0.2.2-rc.3-win7.1. Leave empty to derive.'
+        required: false
+        type: string
+      build_version:
+        description: 'Optional --build-version passed to the packaging script.'
+        required: false
+        type: string
+      upload_release:
+        description: 'Create/update the GitHub Release with installer and update feed.'
+        required: false
+        type: boolean
+        default: false
+  push:
+    tags:
+      - 'dsh-v*-win7.*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: package-win7-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    runs-on: [self-hosted, windows, dsh-win7]
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      INPUT_VERSION: ${{ inputs.version }}
+      INPUT_TAG: ${{ inputs.tag }}
+      INPUT_BUILD_VERSION: ${{ inputs.build_version }}
+      ARTIFACTS_ROOT: ${{ vars.DSH_WIN7_ARTIFACTS }}
+    steps:
+      - name: Checkout source and submodule
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          # Keep out/, tools/ and other untracked local build inputs on the runner.
+          clean: false
+          fetch-depth: 1
+
+      - name: Link and verify prepared build inputs
+        shell: pwsh
+        run: |
+          git config core.autocrlf false
+          git config core.longpaths true
+          if (Test-Path 'deepseek-harness/.git') {
+            git -C deepseek-harness config core.autocrlf false
+            git -C deepseek-harness config core.longpaths true
+          }
+          # DSH_WIN7_ARTIFACTS points to a prepared checkout holding out/ and tools/.
+          # Junctions keep the heavy, untracked build inputs out of the Actions workspace.
+          if ($env:ARTIFACTS_ROOT) {
+            foreach ($name in @('out', 'tools')) {
+              if (Test-Path -LiteralPath $name) { continue }
+              $target = Join-Path $env:ARTIFACTS_ROOT $name
+              if (-not (Test-Path -LiteralPath $target)) { throw "Missing artifact directory: $target" }
+              New-Item -ItemType Junction -Path $name -Target $target | Out-Null
+            }
+          }
+          $required = @(
+            'tools\node-v24.21.0-win-x64\node.exe'
+            'out\node-v24.21.0-win-x64.zip'
+            'out\win7-runtime-overlay'
+            'out\pwsh\PowerShell-7.2.24-win-x64.zip'
+            'out\pwsh\PowerShell-7.2.24-win-x64.zip.sha256'
+            'out\electron-v44.2.0-win32-x64.zip'
+          )
+          $missing = @($required | Where-Object { -not (Test-Path -LiteralPath $_) })
+          if ($missing.Count -gt 0) {
+            throw "Missing prepared build inputs on this runner:`n$($missing -join "`n")"
+          }
+
+      - name: Resolve version and tag
+        id: meta
+        shell: pwsh
+        run: |
+          $tagFromRef = ''
+          if ($env:GITHUB_REF -like 'refs/tags/*') { $tagFromRef = $env:GITHUB_REF_NAME }
+          $tag = $env:INPUT_TAG
+          if (-not $tag) { $tag = $tagFromRef }
+          $version = $env:INPUT_VERSION
+          if (-not $version -and $tag -match '^dsh-v(.+)-win7\.\d+$') { $version = $Matches[1] }
+          if (-not $version) {
+            throw 'Version is required: push a dsh-v*-win7.* tag or set the version input.'
+          }
+          if (-not $tag) { $tag = "dsh-v$version-win7.1" }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "version=$version  tag=$tag"
+
+      - name: Ensure desktop .env.windows
+        shell: pwsh
+        run: |
+          $envFile = 'deepseek-harness\apps\desktop\.env.windows'
+          if (Test-Path -LiteralPath $envFile) { return }
+          @(
+            'DSH_DESKTOP_APP_ID=local.dsh-win7.harness'
+            'DSH_DESKTOP_AUTO_UPDATE_ENV=production'
+            'DSH_DESKTOP_MANDATORY_UPDATE_PROD_ORIGIN=https://policy.invalid'
+            'DSH_DESKTOP_MANDATORY_UPDATE_CONFIG=''{}'''
+          ) | Set-Content -LiteralPath $envFile -Encoding utf8
+
+      - name: Package installer
+        shell: pwsh
+        run: |
+          $extra = @()
+          if ($env:INPUT_BUILD_VERSION) { $extra += @('--build-version', $env:INPUT_BUILD_VERSION) }
+          & .\scripts\package-desktop-win7.ps1 @extra
+
+      - name: Collect release files
+        id: release
+        env:
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.meta.outputs.version }}
+        shell: pwsh
+        run: |
+          # This directory is CI-owned; drop leftovers from earlier runs.
+          $dir = Join-Path (Get-Location).Path ('out\release\' + $env:RELEASE_TAG)
+          if (Test-Path -LiteralPath $dir) { Remove-Item -LiteralPath $dir -Recurse -Force }
+          & .\scripts\prepare-win7-release.ps1 -Version $env:RELEASE_VERSION -Tag $env:RELEASE_TAG
+          $exe = Get-ChildItem -LiteralPath $dir -Filter 'deepseek-harness-*.exe' -File | Select-Object -First 1
+          if (-not $exe) { throw "installer not found in $dir" }
+          "dir=$dir" >> $env:GITHUB_OUTPUT
+          "exe=$($exe.Name)" >> $env:GITHUB_OUTPUT
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsh-win7-${{ steps.meta.outputs.tag }}
+          path: |
+            out/release/${{ steps.meta.outputs.tag }}/deepseek-harness-*.exe
+            out/release/${{ steps.meta.outputs.tag }}/deepseek-harness-*.exe.blockmap
+            out/release/${{ steps.meta.outputs.tag }}/nightly.yml
+            out/release/${{ steps.meta.outputs.tag }}/stable.yml
+          if-no-files-found: error
+
+      - name: Write release notes
+        if: ${{ inputs.upload_release }}
+        env:
+          RELEASE_VERSION: ${{ steps.meta.outputs.version }}
+          RELEASE_DIR: ${{ steps.release.outputs.dir }}
+          EXE_NAME: ${{ steps.release.outputs.exe }}
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:RELEASE_DIR $env:EXE_NAME
+          $sha = (Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLower()
+          $notes = "Windows 7 x64 build of DeepSeek Harness $($env:RELEASE_VERSION).`n`nInstaller SHA-256:`n$sha  $($env:EXE_NAME)"
+          [IO.File]::WriteAllText((Join-Path $env:RUNNER_TEMP 'release-notes.md'), $notes, [Text.UTF8Encoding]::new($false))
+
+      - name: Publish GitHub Release
+        if: ${{ inputs.upload_release }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.tag }}
+          body_path: ${{ runner.temp }}/release-notes.md
+          make_latest: true
+          files: |
+            out/release/${{ steps.meta.outputs.tag }}/deepseek-harness-*.exe
+            out/release/${{ steps.meta.outputs.tag }}/deepseek-harness-*.exe.blockmap
+            out/release/${{ steps.meta.outputs.tag }}/nightly.yml
+            out/release/${{ steps.meta.outputs.tag }}/stable.yml
+          fail_on_unmatched_files: true
