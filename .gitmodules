@@ -1,0 +1,4 @@
+[submodule "deepseek-harness"]
+	path = deepseek-harness
+	url = https://github.com/waytoaq/deepseek-harness.git
+	branch = dsh-v0.2.2-rc.3-win7
