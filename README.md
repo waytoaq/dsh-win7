@@ -8,7 +8,7 @@
 |---|---|
 | 适配的 DSH 版本 | 0.2.2-rc.3（上游 tag `dsh-v0.2.2-rc.3`） |
 | 当前发布 | [`dsh-v0.2.2-rc.3-win7.1`](https://github.com/factfinding/dsh-win7/releases/tag/dsh-v0.2.2-rc.3-win7.1) |
-| DSH 源码改动 | [factfinding/deepseek-harness](https://github.com/factfinding/deepseek-harness/tree/dsh-v0.2.2-rc.3-win7) 的 `dsh-v0.2.2-rc.3-win7` 分支 |
+| DSH 源码改动 | [waytoaq/deepseek-harness](https://github.com/waytoaq/deepseek-harness/tree/dsh-v0.2.2-rc.3-win7) 的 `dsh-v0.2.2-rc.3-win7` 分支 |
 | 旧版本 | 0.2.2-rc.1：[`dsh-v0.2.2-rc.1-win7.1`](https://github.com/factfinding/dsh-win7/releases/tag/dsh-v0.2.2-rc.1-win7.1)；0.2.1-rc.5：[`dsh-v0.2.1-rc.5-win7.1`](https://github.com/factfinding/dsh-win7/releases/tag/dsh-v0.2.1-rc.5-win7.1)；0.2.1-rc.3：[`dsh-v0.2.1-rc.3-win7.1`](https://github.com/factfinding/dsh-win7/releases/tag/dsh-v0.2.1-rc.3-win7.1)；0.2.1-rc.2：[`dsh-v0.2.1-rc.2-win7.1`](https://github.com/factfinding/dsh-win7/releases/tag/dsh-v0.2.1-rc.2-win7.1)；0.2.0-rc.2：[`dsh-v0.2.0-rc.2-win7.1`](https://github.com/factfinding/dsh-win7/releases/tag/dsh-v0.2.0-rc.2-win7.1) |
 
 ## 安装

@@ -8,7 +8,14 @@ for %%i in ("%DSH_WIN7_ROOT%") do set "DSH_WIN7_ROOT=%%~fi"
 set "ELECTRON_ROOT=%DSH_WIN7_ROOT%\e"
 set "PATH=%DSH_WIN7_ROOT%\depot_tools;%DSH_WIN7_ROOT%\tools\node-v24.21.0-win-x64;%PATH%"
 set DEPOT_TOOLS_WIN_TOOLCHAIN=0
-set "vs2022_install=C:\Program Files\Microsoft Visual Studio\2022\Community"
+rem Community on the original build machine; BuildTools is the layout on machines that only installed the C++ workload.
+if exist "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" (
+  set "vs2022_install=C:\Program Files\Microsoft Visual Studio\2022\Community"
+) else if exist "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat" (
+  set "vs2022_install=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools"
+) else (
+  echo electron-env: Visual Studio 2022 with the MSVC tools was not found.& exit /b 1
+)
 set GIT_CONFIG_COUNT=3
 set GIT_CONFIG_KEY_0=core.autocrlf
 set GIT_CONFIG_VALUE_0=false

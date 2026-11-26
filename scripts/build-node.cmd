@@ -14,3 +14,4 @@ rem 12 leaves memory for the Win7 VM (V8 files can take several hundred MB each)
 if not defined msbuild_args set "msbuild_args=/p:UseMultiToolTask=true /p:EnforceProcessCountAcrossBuilds=true /p:CL_MPCount=12"
 cd /d "%~dp0..\node" || exit /b 1
 call vcbuild.bat release x64 package %*
+exit /b %errorlevel%
